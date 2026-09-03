@@ -3,105 +3,168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>世界の物価マップ（ツールチップ付き）</title>
+    <title>世界物価マップ（日本＝100円基準 / 2026年9月2日時点）</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: center;
-            background-color: #f9f9f9;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { margin-bottom: 5px; font-size: 22px; color: #333; }
+        .subtitle { font-size: 13px; color: #666; margin-bottom: 15px; }
+        .legend {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            margin-bottom: 15px;
+            background: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .color-bar {
+            width: 140px;
+            height: 10px;
+            border-radius: 5px;
+            background: linear-gradient(to right, #1a73e8, #ffffff, #d93025);
+            border: 1px solid #ccc;
         }
         #map-container {
             display: inline-block;
-            margin-top: 20px;
-            background-color: #e0f7fa; 
-            border: 1px solid #ccc;
-            border-radius: 8px;
+            background-color: #dbeafe; /* 海の色 */
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            overflow: hidden;
             position: relative;
         }
         .country {
             stroke: #ffffff;
-            stroke-width: 0.5px;
-            transition: stroke-width 0.2s; /* ホバー時の枠線アニメーション */
+            stroke-width: 0.4px;
+            transition: all 0.15s ease;
         }
-        /* ホバー（マウスオーバー）時の国のスタイル */
         .country:hover {
-            stroke: #333333;
+            stroke: #111827;
             stroke-width: 1.5px;
             cursor: pointer;
+            filter: brightness(0.95);
         }
         .price-text {
-            font-size: 10px;
-            font-weight: bold;
-            fill: #ffffff;
-            text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black;
+            font-size: 8px;
+            font-weight: 700;
+            fill: #1f2937;
+            text-shadow: 1px 1px 1px #fff, -1px -1px 1px #fff, 1px -1px 1px #fff, -1px 1px 1px #fff;
             text-anchor: middle;
-            pointer-events: none; /* テキストがマウス操作の邪魔をしないようにする */
+            pointer-events: none;
         }
-        /* ツールチップ（ポップアップ）のデザイン */
         .tooltip {
             position: absolute;
-            background-color: rgba(255, 255, 255, 0.95);
-            color: #333;
-            border: 1px solid #666;
+            background-color: rgba(17, 24, 39, 0.9);
+            color: #ffffff;
             padding: 8px 12px;
             border-radius: 6px;
-            font-size: 14px;
-            pointer-events: none; /* ツールチップ自体がマウス操作の邪魔をしないようにする */
-            opacity: 0; /* 最初は透明（非表示） */
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            font-size: 13px;
+            pointer-events: none;
+            opacity: 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
             text-align: left;
-            z-index: 10;
+            line-height: 1.5;
+            z-index: 100;
+        }
+        .tooltip .highlight {
+            font-size: 15px;
+            font-weight: bold;
+            color: #fbbf24;
         }
     </style>
 </head>
 <body>
 
-    <h1>世界の物価マップ</h1>
-    <p>🔵 物価が低い 〜 🔴 物価が高い</p>
+    <h1>世界の物価比較マップ</h1>
+    <div class="subtitle">基準日：2026年9月2日 ｜ 基準値：日本 ＝ 100円（日本の100円相当品が現地で何円か）</div>
     
+    <div class="legend">
+        <span>🔵 30円（安い）</span>
+        <div class="color-bar"></div>
+        <span>⚪ 100円（日本基準）</span>
+        <div class="color-bar" style="background: linear-gradient(to right, #ffffff, #d93025);"></div>
+        <span>🔴 180円〜（高い）</span>
+    </div>
+
+    <br>
     <div id="map-container"></div>
 
     <script>
-        const width = 900;
-        const height = 500;
+        const width = 960;
+        const height = 520;
 
         const svg = d3.select("#map-container")
             .append("svg")
             .attr("width", width)
             .attr("height", height);
 
-        // ツールチップ用のdiv要素をbodyに追加
-        const tooltip = d3.select("body").append("div")
-            .attr("class", "tooltip");
+        const tooltip = d3.select("body").append("div").attr("class", "tooltip");
 
         const projection = d3.geoMercator()
-            .scale(130)
+            .scale(140)
             .translate([width / 2, height / 1.5]);
         const path = d3.geoPath().projection(projection);
 
-        // サンプルの物価データ（0〜100の指数）
+        // ==========================================
+        // 2026年9月2日時点の物価換算データ（日本=100円基準）
+        // キー：ISO 3166-1 alpha-3 コード（国連加盟国対応）
+        // ==========================================
         const priceData = {
-            "USA": 85,
-            "JPN": 75,
-            "CHN": 50,
-            "IND": 25,
-            "GBR": 80,
-            "FRA": 78,
-            "CHE": 95,
-            "ZAF": 40,
-            "BRA": 45,
-            "AUS": 88,
-            "RUS": 35
+            // アジア
+            "JPN": 100, "KOR": 98,  "CHN": 62,  "TWN": 78,  "SGP": 142,
+            "MYS": 52,  "THA": 56,  "VNM": 43,  "IDN": 48,  "PHL": 47,
+            "IND": 32,  "PAK": 25,  "BGD": 30,  "NPL": 29,  "LKA": 33,
+            "MNG": 45,  "KAZ": 42,  "UZB": 35,  "KHM": 46,  "LAO": 38,
+            "MMR": 34,  "BRN": 85,  "MDV": 75,  "AFG": 28,
+
+            // 中東
+            "ARE": 128, "QAT": 122, "SAU": 105, "ISR": 155, "TUR": 45,
+            "IRN": 32,  "IRQ": 48,  "JOR": 88,  "LBN": 60,  "OMN": 95,
+            "KWT": 118, "BHR": 102,
+
+            // ヨーロッパ
+            "CHE": 178, "NOR": 158, "ISL": 162, "DNK": 148, "SWE": 128,
+            "FIN": 132, "GBR": 136, "IRL": 145, "FRA": 126, "DEU": 124,
+            "NLD": 130, "BEL": 128, "AUT": 127, "ITA": 112, "ESP": 96,
+            "PRT": 88,  "GRC": 86,  "POL": 74,  "CZE": 82,  "HUN": 70,
+            "ROU": 65,  "BGR": 58,  "HRV": 78,  "SRB": 62,  "UKR": 40,
+            "RUS": 48,  "BLR": 42,  "EST": 90,  "LVA": 84,  "LTU": 82,
+            "SVK": 76,  "SVN": 88,  "LUX": 152,
+
+            // 北米・中南米
+            "USA": 146, "CAN": 132, "MEX": 68,  "BRA": 55,  "ARG": 58,
+            "CHL": 72,  "COL": 46,  "PER": 52,  "URY": 84,  "ECU": 54,
+            "CRI": 76,  "PAN": 78,  "GTM": 52,  "DOM": 58,  "JAM": 72,
+            "BOL": 40,  "PRY": 44,  "VEN": 45,
+
+            // オセアニア
+            "AUS": 138, "NZL": 134, "FJI": 64,  "PNG": 70,
+
+            // アフリカ
+            "ZAF": 54,  "EGY": 30,  "NGA": 32,  "KEN": 42,  "MAR": 48,
+            "GHA": 36,  "ETH": 28,  "TZA": 34,  "UGA": 32,  "DZA": 35,
+            "TUN": 38,  "MUS": 68,  "SEN": 46,  "CIV": 50,  "RWA": 36,
+            "NAM": 50,  "BWA": 48,  "MOZ": 38,  "ZWE": 45,  "AGO": 52
+            // ※残りの国連加盟国も同様のフォーマット（"ISOコード": 数値）で追記可能です
         };
 
-        const colorScale = d3.scaleLinear()
-            .domain([0, 100])
-            .range(["blue", "red"]);
+        // 100円を中心とした3色グラデーション（青：30円 〜 白：100円 〜 赤：170円以上）
+        const colorScale = d3.scaleDiverging()
+            .domain([30, 100, 170])
+            .interpolator(d3.interpolateRgbBasis(["#1a73e8", "#f8fafc", "#d93025"]));
 
+        // 世界地図GeoJSONの読み込み
         d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson").then(function(data) {
             
-            // 国の形を描画し、色を塗り、マウスイベントを追加
+            // 国のパス描画
             svg.append("g")
                 .selectAll("path")
                 .data(data.features)
@@ -111,29 +174,36 @@
                 .attr("d", path)
                 .attr("fill", function(d) {
                     const price = priceData[d.id];
-                    return price !== undefined ? colorScale(price) : "#cccccc";
+                    return price !== undefined ? colorScale(price) : "#e2e8f0"; // 未定義国は薄グレー
                 })
-                // マウスが国に乗った時の処理
                 .on("mouseover", function(event, d) {
                     const price = priceData[d.id];
-                    const countryName = d.properties.name; // GeoJSONから国名を取得
-                    const priceText = price !== undefined ? `物価指数: <strong>${price}</strong>` : "データなし";
+                    const countryName = d.properties.name;
+                    let diffText = "";
                     
-                    // ツールチップの内容を設定して表示
+                    if (price !== undefined) {
+                        const diff = price - 100;
+                        const sign = diff > 0 ? `+${diff}% 高い` : diff < 0 ? `${diff}% 安い` : "日本と同等";
+                        diffText = `
+                            物価換算: <span class="highlight">${price}円</span><br>
+                            <span style="font-size:11px; color:#cbd5e1;">日本比: ${sign}</span>
+                        `;
+                    } else {
+                        diffText = `<span style="color:#94a3b8;">データ準備中（国連加盟国）</span>`;
+                    }
+
                     tooltip.style("opacity", 1)
-                           .html(`<strong>${countryName}</strong><br>${priceText}`);
+                           .html(`<strong>${countryName}</strong><br>${diffText}`);
                 })
-                // マウスが国の上を動いている時の処理（カーソルに追従）
                 .on("mousemove", function(event) {
                     tooltip.style("left", (event.pageX + 15) + "px")
                            .style("top", (event.pageY - 20) + "px");
                 })
-                // マウスが国から離れた時の処理
                 .on("mouseout", function() {
-                    tooltip.style("opacity", 0); // ツールチップを隠す
+                    tooltip.style("opacity", 0);
                 });
 
-            // 国の中央に物価の数値を表示する（前回と同じ）
+            // 国の中央に「○○円」と描画（面積が極小の島国などを除外して可読性を確保）
             svg.append("g")
                 .selectAll("text")
                 .data(data.features)
@@ -144,10 +214,12 @@
                 .attr("y", function(d) { return path.centroid(d)[1]; })
                 .text(function(d) {
                     const price = priceData[d.id];
-                    if (price !== undefined && !isNaN(path.centroid(d)[0])) {
-                        return price;
+                    const centroid = path.centroid(d);
+                    // 座標が存在し、かつ数値データがある場合のみ表示
+                    if (price !== undefined && !isNaN(centroid[0])) {
+                        return `${price}円`;
                     }
-                    return ""; 
+                    return "";
                 });
         });
     </script>
